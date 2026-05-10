@@ -20,18 +20,19 @@ function Options(callback) {
 	};
 
 	function storeSet(option, value) {
-		localStorage[option] = typeof value == 'object' ? JSON.stringify(value) : value;
+		var data = {};
+		data[option] = typeof value == 'object' ? JSON.stringify(value) : value;
+		chrome.storage.local.set(data);
 	}
 
-	function storeGet(option) {
-		var value = localStorage.getItem(option);
-		if(value == 'true') {
+	function parseStoredValue(value) {
+		if (value === 'true') {
 			return true;
 		}
-		if(value == 'false') {
+		if (value === 'false') {
 			return false;
 		}
-		if(value !== null && value.charAt(0) == '{' && value.charAt(value.length - 1) == '}') {
+		if (value !== null && typeof value === 'string' && value.charAt(0) == '{' && value.charAt(value.length - 1) == '}') {
 			return JSON.parse(value);
 		}
 		return value;
@@ -50,28 +51,21 @@ function Options(callback) {
 		};
 	}
 
-	function initDefaultOptions() {
-		// flush old settings
-		if(typeof localStorage['evalShowTime'] == 'undefined') {
-			for(var i in localStorage) {
-				if(i != 'version') {
-					delete localStorage[i];
-				}
-			}
-		}
-
-		for(var option in options) {
-			var value = storeGet(option);
-			if(value === null) {
+	function initDefaultOptions(storedData, cb) {
+		for (var option in options) {
+			var value = (typeof storedData[option] !== 'undefined' && storedData[option] !== null)
+				? parseStoredValue(storedData[option])
+				: null;
+			if (value === null) {
 				value = options[option];
 				storeSet(option, value);
-			}
-			else {
+			} else {
 				options[option] = value;
 			}
 			self.__defineGetter__(option, getterFunc(option));
 			self.__defineSetter__(option, setterFunc(option));
 		}
+		cb();
 	}
 
 	var serverOptionsDefaults = {
@@ -134,8 +128,13 @@ function Options(callback) {
 	};
 	connector.onsuccess = function() {
 		db = connector.result;
-		initDefaultOptions();
-		callback(self);
+		// Load all stored options at once, then initialize
+		var optionKeys = Object.keys(options);
+		chrome.storage.local.get(optionKeys, function(storedData) {
+			initDefaultOptions(storedData, function() {
+				callback(self);
+			});
+		});
 	};
 
 }

@@ -83,7 +83,7 @@ if(serverProtocol) {
 			if(hash != jsLastError && jsErrorsCount < 10) {
 				jsLastError = hash;
 				jsErrorsCount++;
-				chrome.extension.sendMessage({
+				chrome.runtime.sendMessage({
 					'_handleJavascriptError': true,
 					'text': error,
 					'url': url,
@@ -96,16 +96,18 @@ if(serverProtocol) {
 
 		window.addEventListener('error', handleJavascriptError, false);
 
-		chrome.extension.onMessage.addListener(onExtensionRequest);
+		chrome.runtime.onMessage.addListener(onExtensionRequest);
 		chrome.runtime.sendMessage({
 			'_registerTab': true,
 			'url': window.location.href,
 			'protocol': serverProtocol
 		}, function(response) {
-			if(response['url']) {
+			if(response && response['url']) {
 				window.location.href = response['url'];
 			}
-			id = response['id'];
+			if(response) {
+				id = response['id'];
+			}
 		});
 	};
 }

@@ -36,14 +36,19 @@ function NotificationsHandler(options) {
 		}
 	}
 
-	chrome.extension.onRequest.addListener(function(request) {
-		if(request['showNotifications']) {
-			self.showNotifications(request['showNotifications']);
-		}
-		else if(request['showNotification']) {
-			self.showNotification(request['message']);
-		}
-	});
+	function ensureOffscreenDocument(callback) {
+		chrome.offscreen.hasDocument().then(function(exists) {
+			if (exists) {
+				callback();
+			} else {
+				chrome.offscreen.createDocument({
+					url: 'offscreen.html',
+					reasons: ['CLIPBOARD', 'DOM_PARSER'],
+					justification: 'Clipboard copy and editor:// URL navigation'
+				}).then(callback);
+			}
+		});
+	}
 
 	function getClipboardText(obj, message) {
 		if(message['type'] == 'debug') {
@@ -229,21 +234,29 @@ function NotificationsHandler(options) {
 				});
 			}
 			else if(button['type'] == 'source') {
-				if(/:\/\//.exec(button['file'])) { // TODO: LOW fix for local JS with disabled Jump to source
+				if(/:\/\//.exec(button['file'])) {
 					chrome.tabs.create({
 						'url': 'view-source:' + button['file'],
 						'active': true
 					});
 				}
 				else if(button['open']) {
-					document.getElementById('debug').setAttribute('src', 'editor://open/?file=' + encodeURIComponent(button['file']) + '&line=' + encodeURIComponent(button['line']));
+					ensureOffscreenDocument(function() {
+						chrome.runtime.sendMessage({
+							type: 'editor-open',
+							file: button['file'],
+							line: button['line']
+						});
+					});
 				}
 			}
 			else if(button['type'] == 'copy') {
-				var textareaNode = document.getElementById('textarea');
-				textareaNode.value = button['text'];
-				textareaNode.select();
-				document.execCommand('Copy', false, null);
+				ensureOffscreenDocument(function() {
+					chrome.runtime.sendMessage({
+						type: 'clipboard-copy',
+						text: button['text']
+					});
+				});
 			}
 			delete notifies[id];
 		}

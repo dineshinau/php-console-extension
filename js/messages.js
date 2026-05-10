@@ -27,12 +27,8 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 			if(pack['protocol'] != options['protocol']) {
 				icon = 'logo_16_fail.png';
 				popup = 'wrong_protocol.html';
-				title = 'Wrong version of PHP Console server. Click on this icon to get update instructions.'; // TODO: add open github on click
+				title = 'Wrong version of PHP Console server. Click on this icon to get update instructions.';
 			}
-			/*else if(!options['enabled']) {
-			 icon = 'logo_16_grey.png';
-			 title = 'PHP Console is disabled on client';
-			 }*/
 			else if(pack['auth']) {
 				if(pack['isEvalEnabled']) {
 					icon = 'terminal_16.png';
@@ -50,14 +46,14 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 				}
 			}
 			onTabReady(tabId, function() {
-				chrome.pageAction.setTitle({'tabId': tabId, 'title': title});
-				chrome.pageAction.setIcon({'tabId': tabId, 'path': 'img/' + icon});
-				chrome.pageAction.setPopup({'tabId': tabId, 'popup': popup});
-				chrome.pageAction.show(tabId);
+				chrome.action.setTitle({'tabId': tabId, 'title': title});
+				chrome.action.setIcon({'tabId': tabId, 'path': 'img/' + icon});
+				chrome.action.setPopup({'tabId': tabId, 'popup': popup});
+				chrome.action.enable(tabId);
 			});
 		}
 		else {
-			chrome.pageAction.hide(tabId);
+			chrome.action.disable(tabId);
 		}
 	};
 
@@ -315,7 +311,7 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 	}
 
 	//noinspection JSUnusedLocalSymbols
-	chrome.extension.onMessage.addListener(function(request, sender) {
+	chrome.runtime.onMessage.addListener(function(request, sender) {
 		if(request['_handleJavascriptError']) {
 			handleJavascriptError(request['text'], request['url'], request['line'], sender.tab.id);
 		}

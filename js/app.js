@@ -1,4 +1,4 @@
-window['app'] = new function() {
+self['app'] = new function() {
 	var self = this;
 	var tabsUrls = {};
 	var lastChangeLogVersion = 2.9;
@@ -18,6 +18,11 @@ window['app'] = new function() {
 	var sslRegexp = new RegExp('^https://', 'i');
 	var _tabsIndex = 0;
 	this._tabsIds = {};
+
+	// MV3: Queue messages until async initialization (IndexedDB + chrome.storage.local) completes.
+	// In MV2 the background page was persistent so this was never an issue.
+	var initialized = false;
+	var pendingMessages = [];
 
 	this['getOptions'] = function() {
 		return options;
@@ -119,7 +124,7 @@ window['app'] = new function() {
 		);
 	};
 
-	chrome.extension.onMessage.addListener(function(request, sender, sendResponse) {
+	function handleMessage(request, sender, sendResponse) {
 		if(request['_registerTab']) {
 			var url = request['url'];
 			if(url.indexOf('chrome-extension://') == 0) {
@@ -158,7 +163,50 @@ window['app'] = new function() {
 			sendEvalRequest(request['code'], request['tabId'], sendResponse);
 			return true;
 		}
+		else if(request['_getActiveTab']) {
+			self['getActiveTab'](function(tabId, domain) {
+				sendResponse({'tabId': tabId, 'domain': domain});
+			});
+			return true;
+		}
+		else if(request['_getOptions']) {
+			var result = {};
+			for(var key in request['keys']) {
+				result[request['keys'][key]] = options[request['keys'][key]];
+			}
+			sendResponse(result);
+		}
+		else if(request['_setOption']) {
+			options[request['key']] = request['value'];
+		}
+		else if(request['_getServer']) {
+			options['getServer'](request['domain'], function(server) {
+				sendResponse(server);
+			});
+			return true;
+		}
+		else if(request['_updateServer']) {
+			options['updateServer'](request['domain'], request['data']);
+		}
+	}
+
+	// Register listener immediately so Chrome knows to wake this service worker for messages.
+	// If not yet initialized, queue the message and process after Options loads.
+	chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+		if(initialized) {
+			return handleMessage(request, sender, sendResponse);
+		}
+		pendingMessages.push({request: request, sender: sender, sendResponse: sendResponse});
+		return true; // keep message channel open for async sendResponse
 	});
+
+	function processPendingMessages() {
+		for(var i = 0; i < pendingMessages.length; i++) {
+			var msg = pendingMessages[i];
+			handleMessage(msg.request, msg.sender, msg.sendResponse);
+		}
+		pendingMessages = [];
+	}
 
 	function notifyUpdate() {
 		var link = 'https://github.com/barbushin/php-console/wiki/PHP-Console-v3-Release-(November-2013)';
@@ -197,6 +245,10 @@ window['app'] = new function() {
 		messagesHandler = new MessagesHandler(options, auth, notificationsHandler, self);
 		headersHandler = new HeadersHandler(messagesHandler);
 
+		// Mark as ready and flush queued messages
+		initialized = true;
+		processPendingMessages();
+
 		var currentVersion = parseFloat(new RegExp('^\\d+\\.\\d+').exec(manifest.version)[0]);
 
 		if(!chrome.extension.inIncognitoContext && options['version'] != currentVersion) {
@@ -211,7 +263,7 @@ window['app'] = new function() {
 					'buttons': [
 						{
 							'title': 'PHP Console server library Installation & Usage Guide',
-							'url': link,
+								'url': link,
 							'icon': 'img/right.png'
 						}
 					]
@@ -235,4 +287,3 @@ window['app'] = new function() {
 		}
 	});
 };
-document.addEventListener('DOMContentLoaded', window['app'], false);

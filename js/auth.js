@@ -22,7 +22,7 @@ function Auth(options) {
 	}
 
 	function getPasswordHash(password) {
-		return window['CryptoJS']['SHA256'](password + 'NeverChangeIt:)').toString();
+		return CryptoJS['SHA256'](password + 'NeverChangeIt:)').toString();
 	}
 
 	this.storePassword = function(domain, password) {
@@ -45,13 +45,13 @@ function DomainAuth(domain, publicKey, passwordHash) {
 
 	this.getAuthToken = function() {
 		if(this.hash && this.publicKey) {
-			return window['CryptoJS']['SHA256'](this.hash + this.publicKey).toString();
+			return CryptoJS['SHA256'](this.hash + this.publicKey).toString();
 		}
 	};
 
 	this.getSignature = function(string) {
 		if(this.hash && this.publicKey) {
-			return window['CryptoJS']['SHA256'](this.hash + this.publicKey + string).toString();
+			return CryptoJS['SHA256'](this.hash + this.publicKey + string).toString();
 		}
 	};
 

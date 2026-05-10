@@ -13,6 +13,7 @@ function HeadersHandler(messagesHandler) {
 	var packsQueue = [];
 
 	function getHeaderValue(responseHeaders, headerName, headerName2) {
+		if(!responseHeaders) return null;
 		for(var i in responseHeaders) {
 			if(responseHeaders[i]['name'] === headerName || responseHeaders[i]['name'] === headerName2) {
 				return responseHeaders[i]['value'];
@@ -78,8 +79,11 @@ function HeadersHandler(messagesHandler) {
 			}
 		}
 
-		if(pack['tabId']) { // TODO: MED check
+		if(pack['tabId']) {
 			chrome.tabs.get(pack['tabId'], function(tab) {
+				if(chrome.runtime.lastError || !tab) {
+					return;
+				}
 				pack['tabUrl'] = tab.url;
 				if(!isPostponed) {
 					packsQueue.push(pack);
@@ -138,17 +142,29 @@ function HeadersHandler(messagesHandler) {
 		return str.join('&');
 	}
 
+	// MV3: XMLHttpRequest is not available in service workers — use fetch() instead
 	this.sendPostRequest = function(url, data, successCallback, failCallback) {
 		try {
-			var xhr = new XMLHttpRequest();
-			xhr.open('POST', url, true);
-			xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-			xhr.onreadystatechange = function() {
-				if(xhr.readyState == 4 && xhr.status == 200 && successCallback) {
-					successCallback(xhr.responseText);
+			fetch(url, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded'
+				},
+				body: buildQuery(data)
+			}).then(function(response) {
+				if(response.ok) {
+					return response.text();
 				}
-			};
-			xhr.send(buildQuery(data));
+				throw new Error('Request failed');
+			}).then(function(text) {
+				if(successCallback) {
+					successCallback(text);
+				}
+			}).catch(function() {
+				if(failCallback) {
+					failCallback();
+				}
+			});
 		}
 		catch (e) {
 			failCallback && failCallback();

@@ -5,81 +5,87 @@ document.addEventListener('DOMContentLoaded', function() {
 	var currentIndex = -1;
 	var currentCode = '';
 	var codeNode = null;
-	var app = chrome.extension.getBackgroundPage()['app'];
 
 	function storeCurrentCode(code) {
 		currentCode = code;
-		var json = localStorage.getItem('evalCurrents');
-		var currents = json ? JSON.parse(json) : {};
-		currents[domain] = {'code': code, 'pos': codeNode.selectionStart};
-		localStorage['evalCurrents'] = JSON.stringify(currents);
+		chrome.storage.local.get('evalCurrents', function(data) {
+			var currents = data['evalCurrents'] ? JSON.parse(data['evalCurrents']) : {};
+			currents[domain] = {'code': code, 'pos': codeNode.selectionStart};
+			chrome.storage.local.set({'evalCurrents': JSON.stringify(currents)});
+		});
 	}
 
 	function initCurrentStoredCode() {
-		var json = localStorage.getItem('evalCurrents');
-		var currents = json ? JSON.parse(json) : {};
-		var current = currents[domain] ? currents[domain] : null;
-		if(current) {
-			currentCode = current['code'];
-			codeNode.focus();
-			codeNode.value = currentCode;
-			codeNode.setSelectionRange(current['pos'], current['pos'])
-		}
+		chrome.storage.local.get('evalCurrents', function(data) {
+			var currents = data['evalCurrents'] ? JSON.parse(data['evalCurrents']) : {};
+			var current = currents[domain] ? currents[domain] : null;
+			if(current) {
+				currentCode = current['code'];
+				codeNode.focus();
+				codeNode.value = currentCode;
+				codeNode.setSelectionRange(current['pos'], current['pos']);
+			}
+		});
 	}
 
 	function storeCodeInHistory(code) {
-		var history = getDomainCodeHistory();
-		if(history[0] != code) {
-			history.unshift(code);
-			if(history.length > historyLimit) {
-				history.pop();
+		getDomainCodeHistory(function(history) {
+			if(history[0] != code) {
+				history.unshift(code);
+				if(history.length > historyLimit) {
+					history.pop();
+				}
 			}
-		}
-		setDomainCodeHistory(history);
-		currentIndex = 0;
+			setDomainCodeHistory(history);
+			currentIndex = 0;
+		});
 	}
 
-	function getDomainCodeHistory() {
-		var json = localStorage.getItem('evalHistory');
-		var history = json ? JSON.parse(json) : {};
-		return history[domain] ? history[domain] : [];
+	function getDomainCodeHistory(callback) {
+		chrome.storage.local.get('evalHistory', function(data) {
+			var history = data['evalHistory'] ? JSON.parse(data['evalHistory']) : {};
+			callback(history[domain] ? history[domain] : []);
+		});
 	}
 
 	function setDomainCodeHistory(domainHistory) {
-		var json = localStorage.getItem('evalHistory');
-		var history = json ? JSON.parse(json) : {};
-		history[domain] = domainHistory;
-		localStorage['evalHistory'] = JSON.stringify(history);
+		chrome.storage.local.get('evalHistory', function(data) {
+			var history = data['evalHistory'] ? JSON.parse(data['evalHistory']) : {};
+			history[domain] = domainHistory;
+			chrome.storage.local.set({'evalHistory': JSON.stringify(history)});
+		});
 	}
 
-	function getPreviousCode() {
-		var history = getDomainCodeHistory();
-		if(currentIndex < historyLimit && (currentIndex + 1 < history.length)) {
-			currentIndex++;
-			return history[currentIndex];
-		}
+	function getPreviousCode(callback) {
+		getDomainCodeHistory(function(history) {
+			if(currentIndex < historyLimit && (currentIndex + 1 < history.length)) {
+				currentIndex++;
+				callback(history[currentIndex]);
+			}
+		});
 	}
 
-	function getNextCode() {
-		var history = getDomainCodeHistory();
-		if(currentIndex > 0) {
-			currentIndex--;
-			return history[currentIndex];
-		}
+	function getNextCode(callback) {
+		getDomainCodeHistory(function(history) {
+			if(currentIndex > 0) {
+				currentIndex--;
+				callback(history[currentIndex]);
+			}
+		});
 	}
 
 	// construct
 
 	document.getElementById('logoutButton').onclick = function() {
-		chrome.extension.sendMessage({
+		chrome.runtime.sendMessage({
 			'_logout': true
 		});
 		window.close();
 	};
 
-	app['getActiveTab'](function(currentTabId, currentDomain) {
-		tabId = currentTabId;
-		domain = currentDomain;
+	chrome.runtime.sendMessage({_getActiveTab: true}, function(response) {
+		tabId = response.tabId;
+		domain = response.domain;
 
 		codeNode = document.getElementById('code');
 		initCurrentStoredCode();
@@ -96,7 +102,7 @@ document.addEventListener('DOMContentLoaded', function() {
 					if(codeNode.value.trim()) {
 						storeCodeInHistory(codeNode.value);
 						codeNode.className = 'send';
-						chrome.extension.sendMessage({
+						chrome.runtime.sendMessage({
 							'_evalCode': true,
 							'code': codeNode.value,
 							'tabId': tabId
@@ -108,10 +114,12 @@ document.addEventListener('DOMContentLoaded', function() {
 				// ctrl + page up/down
 				else {
 					if(key == 38 || key == 40) {
-						var code = key == 38 ? getPreviousCode() : getNextCode();
-						if(code) {
-							codeNode.value = code;
-						}
+						var handler = function(code) {
+							if(code) {
+								codeNode.value = code;
+							}
+						};
+						key == 38 ? getPreviousCode(handler) : getNextCode(handler);
 					}
 				}
 			}
